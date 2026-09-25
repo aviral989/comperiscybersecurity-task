@@ -1,0 +1,286 @@
+"""
+Multi-Tenant Project Management Platform GraphQL Schema
+Supports organizations, role-based access, projects, customizable statuses,
+activity auditing, comments, and cursor-based pagination.
+"""
+
+scalar DateTime
+scalar JSON
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum StatusCategory {
+  BACKLOG
+  UNSTARTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ActivityType {
+  CREATED
+  STATUS_CHANGED
+  PRIORITY_CHANGED
+  ASSIGNEE_CHANGED
+  DUE_DATE_CHANGED
+  TITLE_CHANGED
+  DESCRIPTION_CHANGED
+  COMMENT_ADDED
+  LABEL_ADDED
+  LABEL_REMOVED
+}
+
+type User {
+  id: ID!
+  email: String!
+  fullName: String!
+  avatarUrl: String
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type OrganizationMember {
+  id: ID!
+  user: User!
+  organizationId: ID!
+  role: Role!
+  joinedAt: DateTime!
+}
+
+type WorkspaceSettings {
+  id: ID!
+  organizationId: ID!
+  enforce2FA: Boolean!
+  allowedEmailDomains: [String!]!
+  defaultRole: Role!
+  theme: String
+  features: JSON
+  updatedAt: DateTime!
+}
+
+type Organization {
+  id: ID!
+  name: String!
+  slug: String!
+  logoUrl: String
+  members: [OrganizationMember!]!
+  projects: [Project!]!
+  settings: WorkspaceSettings!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type ProjectStatus {
+  id: ID!
+  projectId: ID!
+  name: String!
+  color: String!
+  category: StatusCategory!
+  position: Int!
+  isDefault: Boolean!
+  tasksCount: Int!
+}
+
+type Label {
+  id: ID!
+  organizationId: ID!
+  name: String!
+  color: String!
+}
+
+type Project {
+  id: ID!
+  organizationId: ID!
+  name: String!
+  key: String!
+  description: String
+  lead: User
+  statuses: [ProjectStatus!]!
+  tasks(
+    first: Int
+    after: String
+    filter: TaskFilterInput
+  ): TaskConnection!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type TaskComment {
+  id: ID!
+  taskId: ID!
+  author: User!
+  content: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type TaskActivity {
+  id: ID!
+  taskId: ID!
+  actor: User!
+  type: ActivityType!
+  field: String
+  oldValue: String
+  newValue: String
+  createdAt: DateTime!
+}
+
+type Task {
+  id: ID!
+  organizationId: ID!
+  projectId: ID!
+  project: Project!
+  sequenceNumber: Int!
+  taskKey: String! # e.g. "PROJ-102"
+  title: String!
+  description: String
+  priority: Priority!
+  status: ProjectStatus!
+  assignee: User
+  reporter: User!
+  dueDate: DateTime
+  labels: [Label!]!
+  comments: [TaskComment!]!
+  activityHistory(limit: Int): [TaskActivity!]!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+# Cursor Pagination Types (Relay Specification)
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+
+type TaskEdge {
+  cursor: String!
+  node: Task!
+}
+
+type TaskConnection {
+  edges: [TaskEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+# Aggregation and Summary Types
+type StatusCount {
+  status: ProjectStatus!
+  count: Int!
+}
+
+type PriorityCount {
+  priority: Priority!
+  count: Int!
+}
+
+type AssigneeCount {
+  assignee: User
+  count: Int!
+}
+
+type TaskSummary {
+  totalTasks: Int!
+  overdueTasks: Int!
+  completedTasks: Int!
+  byStatus: [StatusCount!]!
+  byPriority: [PriorityCount!]!
+  byAssignee: [AssigneeCount!]!
+}
+
+# Inputs
+input TaskFilterInput {
+  statusId: ID
+  statusIds: [ID!]
+  assigneeId: ID
+  priority: Priority
+  priorities: [Priority!]
+  searchQuery: String
+  dueDateFrom: DateTime
+  dueDateTo: DateTime
+  isOverdue: Boolean
+}
+
+input CreateTaskInput {
+  projectId: ID!
+  title: String!
+  description: String
+  priority: Priority!
+  statusId: ID!
+  assigneeId: ID
+  dueDate: DateTime
+  labelIds: [ID!]
+}
+
+input UpdateTaskInput {
+  id: ID!
+  title: String
+  description: String
+  priority: Priority
+  statusId: ID
+  assigneeId: ID
+  dueDate: DateTime
+  labelIds: [ID!]
+}
+
+input CreateProjectStatusInput {
+  projectId: ID!
+  name: String!
+  color: String!
+  category: StatusCategory!
+  position: Int!
+}
+
+# Queries and Mutations
+type Query {
+  # Viewer & Organization
+  currentUser: User!
+  currentOrganization: Organization!
+  organizationMembers(organizationId: ID!): [OrganizationMember!]!
+
+  # Projects
+  project(id: ID!): Project
+  projects(organizationId: ID!): [Project!]!
+
+  # Tasks & Board
+  tasks(
+    projectId: ID!
+    first: Int
+    after: String
+    filter: TaskFilterInput
+  ): TaskConnection!
+  
+  task(id: ID!): Task
+
+  # Summary KPI aggregation
+  taskSummary(projectId: ID!, filter: TaskFilterInput): TaskSummary!
+
+  # User dashboard across projects
+  myOverdueTasks(first: Int, after: String): TaskConnection!
+}
+
+type Mutation {
+  createTask(input: CreateTaskInput!): Task!
+  updateTask(input: UpdateTaskInput!): Task!
+  moveTaskStatus(id: ID!, statusId: ID!, targetPosition: Int): Task!
+  deleteTask(id: ID!): Boolean!
+
+  addComment(taskId: ID!, content: String!): TaskComment!
+  
+  createProjectStatus(input: CreateProjectStatusInput!): ProjectStatus!
+  updateWorkspaceSettings(organizationId: ID!, enforce2FA: Boolean, theme: String): WorkspaceSettings!
+}
