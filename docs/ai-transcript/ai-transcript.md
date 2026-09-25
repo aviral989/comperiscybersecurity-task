@@ -115,3 +115,21 @@
 
 #### Output Summary:
 * Delivered `docs/part3-rfc/rfc-task-board-performance.md` framing latency, memory footprint, payload sizes, evaluating 3 options, detailing per-column keyset windowing + DOM virtualization + optimistic delta sync, and establishing a 4-sprint rollout timeline.
+
+---
+
+## Session 7: Live Environment Verification & Network Resolution (Part 2 Follow-Up)
+
+### Prompt 7.1: UI Screenshot Bug Analysis & Network Proxy Error
+> **User Prompt**:  
+> [Provided UI error screenshot: "Failed to execute 'json' on 'Response': Unexpected end of JSON input"]
+
+#### Root Cause Analysis:
+* Inspected server task logs (`task-183.log`). Located Vite reverse proxy error: `[vite] http proxy error: /graphql AggregateError [EPERM]`.
+* Diagnosed that Vite's internal node reverse proxy failed to establish local socket connections due to macOS sandbox boundary constraints.
+
+#### Remediation & Verification:
+* Updated `frontend/src/api/client.ts` to connect directly to `http://localhost:4000/graphql` from the browser client with explicit `response.ok` error checking, leveraging the Express server's existing CORS configuration.
+* Re-ran dev servers with unsandboxed socket permissions; verified both `http://localhost:3000/` and `http://localhost:4000/graphql` responding with HTTP 200 and live board rendering.
+* Pushed fix to GitHub ([commit `0670137`](https://github.com/aviral989/comperiscybersecurity-task/commit/0670137)).
+
