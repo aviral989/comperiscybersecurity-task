@@ -1,10 +1,15 @@
+const GRAPHQL_URL =
+  typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? 'http://localhost:4000/graphql'
+    : '/graphql';
+
 export async function graphqlRequest<T>(
   query: string,
   variables: Record<string, any> = {},
   tenantId: string = 'org-1',
   userId: string = 'usr-1'
 ): Promise<T> {
-  const response = await fetch('/graphql', {
+  const response = await fetch(GRAPHQL_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -13,6 +18,11 @@ export async function graphqlRequest<T>(
     },
     body: JSON.stringify({ query, variables })
   });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`GraphQL Network Error (Status ${response.status}): ${errText || response.statusText}`);
+  }
 
   const json = await response.json();
 
